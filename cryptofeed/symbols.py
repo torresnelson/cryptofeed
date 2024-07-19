@@ -7,7 +7,10 @@ associated with this software.
 from datetime import datetime as dt, timezone
 from typing import Dict, Tuple, Union
 
-from cryptofeed.defines import FUTURES, FX, OPTION, PERPETUAL, SPOT, CALL, PUT, CURRENCY
+from cryptofeed.defines import (
+    FUTURES, FUTURE_COMBO, FX, OPTION, OPTION_COMBO,
+    PERPETUAL, SPOT, CALL, PUT, CURRENCY
+)
 
 
 class Symbol:
@@ -19,7 +22,7 @@ class Symbol:
                 raise ValueError("option_type must be either CALL or PUT")
             if strike_price is None:
                 raise ValueError("Missing value for strike_price")
-        if type in (FUTURES, OPTION) and expiry_date is None:
+        if type in (FUTURES, FUTURE_COMBO, OPTION, OPTION_COMBO) and expiry_date is None:
             raise ValueError("Missing value for expiry_date")
 
         self.quote = quote
@@ -29,7 +32,9 @@ class Symbol:
         self.strike_price = strike_price
 
         if expiry_date and expiry_normalize:
-            self.expiry_date = self.date_format(expiry_date)
+            expiry_date = self.date_format(expiry_date)
+
+        self.expiry_date = expiry_date
 
     def __repr__(self) -> str:
         return self.normalized
@@ -51,6 +56,27 @@ class Symbol:
             month = Symbol.month_code(date.month)
             day = date.day
             return f"{year}{month}{day}"
+
+        if isinstance(date, str):
+            months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC']
+            if len(date) == 4:
+                year = str(dt.utcnow().year)[2:]
+                date = year + date
+            if len(date) == 6:
+                month = date[1:4]
+                if month.upper() in months:
+                    year = date[-2:]
+                    month = Symbol.month_code(months.index(month) + 1)
+                    day = date[:1]
+                else:
+                    year = date[:2]
+                    month = Symbol.month_code(date[2:4])
+                    day = date[4:]
+                return f"{year}{month}{day}"
+            if len(date) == 9 or len(date) == 7:
+                year, month, day = date[-2:], date[2:5], date[:2]
+                month = Symbol.month_code(months.index(month) + 1)
+                return f"{year}{month}{day}"
 
         if len(date) == 4:
             year = str(dt.utcnow().year)[2:]
@@ -76,9 +102,9 @@ class Symbol:
             base = f"{self.base}{self.symbol_sep}{self.quote}"
         if self.type == SPOT:
             return base
-        if self.type == OPTION:
+        if self.type == OPTION or self.type == OPTION_COMBO:
             return f"{base}{self.symbol_sep}{self.strike_price}{self.symbol_sep}{self.expiry_date}{self.symbol_sep}{self.option_type}"
-        if self.type == FUTURES:
+        if self.type == FUTURES or self.type == FUTURE_COMBO:
             return f"{base}{self.symbol_sep}{self.expiry_date}"
         if self.type == PERPETUAL:
             return f"{base}{self.symbol_sep}PERP"
